@@ -12,4 +12,9 @@ public class BankController {
 		
 		return "hello";
 	}
+	
+	@GetMapping("/api/public-info")
+	public String publicApi() {
+	    return "This is visible to browser GET";
+	}
 }
