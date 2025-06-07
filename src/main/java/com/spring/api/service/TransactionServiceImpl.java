@@ -2,6 +2,7 @@ package com.spring.api.service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.BeanUtils;
@@ -28,59 +29,82 @@ public class TransactionServiceImpl implements TransactionService {
 
     @Autowired
     private AccountRepository accountRepo;
-
+    
+    @Autowired
+    private ExternalBankClient externalBankClient;
+    
     @Autowired
     private UserRepo userRepo;
 
-    @Override
-    public TransactionResponse transfer(TransferRequest request, String currentUserEmail) {
+   
         // Validate sender matches current user or has permission
         // Validate accounts exist
         // Validate sufficient funds, consent etc (if applicable)
-    	User senderUser = userRepo.findByEmail(currentUserEmail)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+    	@Override
+    	public TransactionResponse transfer(TransferRequest request, String currentUserEmail) {
+    	    User senderUser = userRepo.findByEmail(currentUserEmail)
+    	        .orElseThrow(() -> new RuntimeException("User not found"));
 
-        List<Account> senderAccounts = accountRepo.findByUser(senderUser);
-        if (senderAccounts.isEmpty()) {
-            throw new RuntimeException("Sender account not found");
-        }
-        Account senderAccount = senderAccounts.get(0);
+    	    // Get sender account
+    	    List<Account> accounts = accountRepo.findByUser(senderUser);
+    	    if (accounts.isEmpty()) throw new RuntimeException("Sender account not found");
 
-        Account receiverAccount = accountRepo.findById(request.getReceiverAccountId())
-                .orElseThrow(() -> new RuntimeException("Receiver account not found"));
+    	    Account senderAccount = accounts.get(0);
 
-        // Check balance
-        if (senderAccount.getBalance().compareTo(request.getAmount()) < 0) {
-            throw new RuntimeException("Insufficient funds");
-        }
+    	    // 🚫 Prevent transfer to same account
+    	    if (senderAccount.getId().equals(request.getReceiverAccountId())) {
+    	        throw new RuntimeException("Cannot transfer to the same account");
+    	    }
 
-        // Deduct from sender, add to receiver
-        senderAccount.setBalance(senderAccount.getBalance().subtract(request.getAmount()));
-        receiverAccount.setBalance(receiverAccount.getBalance().add(request.getAmount()));
+    	    // Validate receiver
+    	    Account receiverAccount = accountRepo.findById(request.getReceiverAccountId())
+    	        .orElse(null); // could be null (external)
 
-        // Save accounts
-        accountRepo.save(senderAccount);
-        accountRepo.save(receiverAccount);
+    	    // 💰 Validate sufficient balance
+    	    if (senderAccount.getBalance().compareTo(request.getAmount()) < 0) {
+    	        throw new RuntimeException("Insufficient balance");
+    	    }
 
-        // Create transaction with SUCCESS status
-        Transaction txn = new Transaction();
-        txn.setSenderAccountId(senderAccount.getId());
-        txn.setReceiverAccountId(receiverAccount.getId());
-        txn.setAmount(request.getAmount());
-        txn.setStatus(TransactionStatus.SUCCESS);
-        txn.setType(TransactionType.TRANSFER);
-        txn.setCreatedAt(LocalDateTime.now());
+    	    // Start transaction object
+    	    Transaction txn = new Transaction();
+    	    txn.setSenderAccountId(senderAccount.getId());
+    	    txn.setReceiverAccountId(request.getReceiverAccountId());
+    	    txn.setAmount(request.getAmount());
+    	    txn.setCreatedAt(LocalDateTime.now());
+    	    txn.setType(TransactionType.TRANSFER);
+    	    txn.setUser(senderUser); // important for DB constraint
 
-        // Set the user here
-        txn.setUser(senderUser);
+    	    // ✅ Internal transfer
+    	    if (receiverAccount != null) {
+    	        // Deduct + Credit
+    	        senderAccount.setBalance(senderAccount.getBalance().subtract(request.getAmount()));
+    	        receiverAccount.setBalance(receiverAccount.getBalance().add(request.getAmount()));
 
-        txn = transactionRepo.save(txn);
+    	        accountRepo.save(senderAccount);
+    	        accountRepo.save(receiverAccount);
 
-        TransactionResponse response = new TransactionResponse();
-        BeanUtils.copyProperties(txn, response);
-        return response;
+    	        txn.setStatus(TransactionStatus.SUCCESS);
+    	    } else {
+    	        // 🌐 External transfer via mock bank
+    	        boolean success = externalBankClient.sendMoneyToExternalBank(request);
+    	        if (success) {
+    	            senderAccount.setBalance(senderAccount.getBalance().subtract(request.getAmount()));
+    	            accountRepo.save(senderAccount);
+    	            txn.setStatus(TransactionStatus.SUCCESS);
+    	        } else {
+    	            txn.setStatus(TransactionStatus.FAILED);
+    	        }
+    	    }
 
-    }
+    	    txn = transactionRepo.save(txn);
+
+    	    // Build response
+    	    TransactionResponse response = new TransactionResponse();
+    	    BeanUtils.copyProperties(txn, response);
+    	    return response;
+    	}
+
+    
 
     @Override
     public List<TransactionResponse> getTransactionsForUser(String currentUserEmail) {

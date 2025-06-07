@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.spring.api.dto.AccountBalanceResponse;
 import com.spring.api.dto.AccountRequest;
 import com.spring.api.dto.AccountResponse;
 import com.spring.api.service.AccountService;
@@ -35,6 +36,12 @@ public class AccountController {
 	        return ResponseEntity.ok(accountService.getAccounts(userDetails.getUsername()));
 	    }
 	
+	    @GetMapping("/balance")
+	    public ResponseEntity<List<AccountBalanceResponse>> getBalances(@AuthenticationPrincipal UserDetails userDetails) {
+	        String userEmail = userDetails.getUsername();  // assuming username = email
+	        List<AccountBalanceResponse> balances = accountService.getAccountBalances(userEmail);
+	        return ResponseEntity.ok(balances);
+	    }
 	
 
 }

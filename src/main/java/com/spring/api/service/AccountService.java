@@ -6,6 +6,7 @@ import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import com.spring.api.dto.AccountBalanceResponse;
 import com.spring.api.dto.AccountRequest;
 import com.spring.api.dto.AccountResponse;
 import com.spring.api.entity.Account;
@@ -41,6 +42,16 @@ public class AccountService {
 	                .stream()
 	                .map(AccountResponse::new)
 	                .collect(Collectors.toList());
+	    }
+	    public List<AccountBalanceResponse> getAccountBalances(String userEmail) {
+	        User user = userRepository.findByEmail(userEmail)
+	                            .orElseThrow(() -> new RuntimeException("User not found"));
+
+	        List<Account> accounts = accountRepository.findByUser(user);
+
+	        return accounts.stream()
+	            .map(acc -> new AccountBalanceResponse(acc.getId(), acc.getBalance()))
+	            .collect(Collectors.toList());
 	    }
 
 }

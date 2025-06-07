@@ -17,6 +17,8 @@ public class TransferRequest {
 	    @NotNull
 	    @DecimalMin(value = "0.01", message = "Amount must be positive")
 	    private BigDecimal amount;
+	    
+	    private String receiverBank;
 
 		public Long getSenderAccountId() {
 			return senderAccountId;
@@ -40,6 +42,14 @@ public class TransferRequest {
 
 		public void setAmount(BigDecimal amount) {
 			this.amount = amount;
+		}
+
+		public String getReceiverBank() {
+			return receiverBank;
+		}
+
+		public void setReceiverBank(String receiverBank) {
+			this.receiverBank = receiverBank;
 		}
 	    
 	    
